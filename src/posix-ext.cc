@@ -8,7 +8,7 @@ using namespace v8;
 // the add-on module-initializing entry point function
 extern "C" void init(Handle<Object> target)
 {
-  HandleScope scope;
+  //HandleScope scope;
 
   // initialize all sub-packages of this add-on module
   process_win::init(target);

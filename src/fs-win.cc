@@ -8,6 +8,7 @@
 #include <accctrl.h>
 #include <aclapi.h>
 #include <sddl.h>
+#include <uv.h>
 
 // methods:
 //   fgetown, getown,
@@ -152,24 +153,29 @@ struct async_data_t {
 
   async_data_t(Local<Function> lcallback) {
     if (!lcallback.IsEmpty()) {
-      callback = Persistent<Function>::New(lcallback);
+		Isolate * isolate = v8::Isolate::GetCurrent();
+		Persistent<Function> persistent(isolate, lcallback);
+		Local<Function>::New(isolate, persistent);
+		callback = persistent;
     }
     request.data = this;
   }
 
   ~async_data_t() {
     if (!callback.IsEmpty()) {
-      callback.Dispose();
+      callback.Reset();
     }
   }
 };
 
 // makes a JavaScript result object literal of user and group SIDs
 static Local<Object> convert_ownership(LPSTR uid, LPSTR gid) {
-  Local<Object> result = Object::New();
+	Isolate * isolate = v8::Isolate::GetCurrent();
+
+	Local<Object> result = Object::New(isolate);
   if (!result.IsEmpty()) {
-    result->Set(uid_symbol, String::New(uid));
-    result->Set(gid_symbol, String::New(gid));
+	  result->Set(uid_symbol.~Persistent, String::NewFromUtf8(isolate, uid));
+	  result->Set(gid_symbol.~Persistent, String::NewFromUtf8(isolate, gid));
   }
   return result;
 }
@@ -178,9 +184,10 @@ static Local<Object> convert_ownership(LPSTR uid, LPSTR gid) {
 // finished to convert the results to JavaScript objects and pass
 // them to JavaScript callback
 static void after_async(uv_work_t * req) {
-  assert(req != NULL);
-  HandleScope scope;
+	Isolate * isolate = v8::Isolate::GetCurrent();
+	v8::EscapableHandleScope handle_scope(isolate);
 
+  assert(req != NULL);
   Local<Value> argv[2];
   int argc = 1;
 
@@ -189,7 +196,7 @@ static void after_async(uv_work_t * req) {
     argv[0] = WinapiErrnoException(async_data->error);
   } else {
     // in case of success, make the first argument (error) null
-    argv[0] = Local<Value>::New(Null());
+	  argv[0] = Local<Value>::New(isolate, Null(isolate));
     // in case of success, populate the second and other arguments
     switch (async_data->operation) {
       case OPERATION_FGETOWN:
@@ -209,12 +216,12 @@ static void after_async(uv_work_t * req) {
 
   // pass the results to the external callback
   TryCatch tryCatch;
-  async_data->callback->Call(Context::GetCurrent()->Global(), argc, argv);
+  async_data->callback->Call(Context::Global, argc, argv);
   if (tryCatch.HasCaught()) {
     FatalException(tryCatch);
   }
 
-  async_data->callback.Dispose();
+  async_data->callback.Reset();
   delete async_data;
 }
 
