@@ -2,7 +2,7 @@
 
 // require the module with cross-platform POSIX functionality
 // it returns an object with the rest of POSIX functions
-var posix = require("posix-ext"),
+var posix = require("../lib/posix-ext"),
     // patch the built-in process object to get the POSIX functions
     process = posix.process,
     // get identifiers (IDs on POSIX, SIDs on Windows) of the user
